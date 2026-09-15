@@ -33,19 +33,30 @@ class MujocoGymEnv(gym.Env):
     LIVE_OBJECT_BODIES: tuple = ()
 
     def live_object_poses(self) -> dict:
-        """{name: [x, y, z, qw, qx, qy, qz]} for each declared body, at the current step."""
+        """{name: [x, y, z, qw, qx, qy, qz]} for each declared body, at the current step.
+
+        A declared attribute is usually one body id, but not always: bimanual_hanoi keeps
+        `_disk_body_id` as a {disk name: id} dict, because the task has a stack of them. Both
+        shapes are handled, and a dict contributes one entry per key in sorted order so the
+        vector's layout is a property of the model rather than of dict insertion order.
+        """
         out = {}
         for attr in self.LIVE_OBJECT_BODIES:
-            body_id = getattr(self, attr, None)
-            if body_id is None:
+            handle = getattr(self, attr, None)
+            if handle is None:
                 continue
             name = attr.lstrip('_')
             if name.endswith('_body_id'):
                 name = name[: -len('_body_id')]
-            out['%s_pose' % name] = np.concatenate(
-                [np.asarray(self._data.xpos[body_id], np.float64),
-                 np.asarray(self._data.xquat[body_id], np.float64)]
-            )
+            if isinstance(handle, dict):
+                ids = [('%s_%s' % (name, k), v) for k, v in sorted(handle.items())]
+            else:
+                ids = [(name, handle)]
+            for label, body_id in ids:
+                out['%s_pose' % label] = np.concatenate(
+                    [np.asarray(self._data.xpos[int(body_id)], np.float64),
+                     np.asarray(self._data.xquat[int(body_id)], np.float64)]
+                )
         return out
 
     def __init__(
