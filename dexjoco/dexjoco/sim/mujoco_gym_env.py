@@ -32,6 +32,47 @@ class MujocoGymEnv(gym.Env):
     # so this reads them rather than introducing anything new.
     LIVE_OBJECT_BODIES: tuple = ()
 
+    # Named scalar degrees of freedom that belong in an observation: a door hinge, a pair of
+    # spectacle hinges, a spray trigger. These are NOT covered by LIVE_OBJECT_BODIES -- a body's
+    # xpos/xquat is the pose of the whole object, and a microwave's door angle does not move the
+    # microwave. Entries are ('name', 'joint'|'sensor', 'key').
+    LIVE_OBJECT_JOINTS: tuple = ()
+
+    # Discrete progress the environment keeps in a Python attribute and nothing else: how many
+    # digits of the passcode are already entered, how many pinches have been made. Entries are
+    # ('name', 'attribute').
+    #
+    # CARRIED ONLY WHERE A POLICY MUST ACT ON AN INTERMEDIATE VALUE, measured rather than
+    # assumed (exps/0915_dexjoco/progress_lag.py in the acrft_ogbench repo). `unlock_index`
+    # takes three values and the policy spends a median of 58 steps at each one -- having
+    # pressed 1, it must know to press 2. `display_blue`, `screen_unlocked` and `trigger_pulled`
+    # each turn on exactly once and success follows after the environment's own debounce window,
+    # so no policy ever acts while knowing them; they are deliberately absent.
+    TASK_PROGRESS: tuple = ()
+
+    def live_object_joints(self) -> dict:
+        """{name: value} for each declared scalar degree of freedom, at the current step."""
+        out = {}
+        for name, kind, key in self.LIVE_OBJECT_JOINTS:
+            try:
+                if kind == 'joint':
+                    v = self._data.joint(key).qpos
+                else:
+                    v = self._data.sensor(key).data
+                out[name] = float(np.asarray(v).ravel()[0])
+            except Exception:
+                continue
+        return out
+
+    def task_progress(self) -> dict:
+        """{name: value} for each declared progress counter, at the current step."""
+        out = {}
+        for name, attr in self.TASK_PROGRESS:
+            v = getattr(self, attr, None)
+            if v is not None:
+                out[name] = float(v)
+        return out
+
     def live_object_poses(self) -> dict:
         """{name: [x, y, z, qw, qx, qy, qz]} for each declared body, at the current step.
 

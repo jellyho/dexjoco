@@ -30,7 +30,7 @@ _N_ALLEGRO = 16
 
 class PandaHammerNailGymEnv(MujocoGymEnv):
 
-    LIVE_OBJECT_BODIES = ("_hammer_body_id",)
+    LIVE_OBJECT_BODIES = ("_hammer_body_id", "_nail_body_id",)
     metadata = {"render_modes": ["rgb_array", "human"]}
 
     def __init__(
@@ -148,6 +148,7 @@ class PandaHammerNailGymEnv(MujocoGymEnv):
 
         # Nail body (mocap) for insertion depth.
         nail_body_id = self._model.body("nail").id
+        self._nail_body_id = int(self._model.body("nail").id)
         self._nail_mocap_id = int(self._model.body("nail").mocapid)
         if self._nail_mocap_id < 0:
             raise RuntimeError("Nail body must be mocap-enabled (mocap='true') in XML.")

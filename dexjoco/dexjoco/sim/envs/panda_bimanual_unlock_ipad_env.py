@@ -26,6 +26,7 @@ _N_ALLEGRO = 16
 class PandaBimanualUnlockIpadGymEnv(MujocoGymEnv):
 
     LIVE_OBJECT_BODIES = ("_ipad_body_id",)
+    TASK_PROGRESS = (("unlock_index", "_unlock_index"),)
     metadata = {"render_modes": ["rgb_array", "human"]}
 
     def __init__(

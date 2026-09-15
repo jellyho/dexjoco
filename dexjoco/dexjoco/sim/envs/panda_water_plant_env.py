@@ -101,6 +101,7 @@ _N_ALLEGRO = len(_ALLEGRO_JOINT_NAMES)
 class PandaWaterPlantGymEnv(MujocoGymEnv):
 
     LIVE_OBJECT_BODIES = ("_spray_body_id",)
+    LIVE_OBJECT_JOINTS = (("spray_trigger", "sensor", "spray_joint_0_pos"),)
     def __init__(
         self,
         render_mode: Literal["rgb_array", "human", "none"],

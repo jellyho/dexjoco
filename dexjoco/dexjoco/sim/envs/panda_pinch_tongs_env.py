@@ -32,6 +32,7 @@ _N_ALLEGRO = 16
 class PandaPinchTongsGymEnv(MujocoGymEnv):
 
     LIVE_OBJECT_BODIES = ("_tongs_body_id",)
+    TASK_PROGRESS = (("pinch_count", "_pinch_count"),)
     metadata = {"render_modes": ["rgb_array", "human"]}
 
     def __init__(

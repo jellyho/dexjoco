@@ -25,6 +25,8 @@ _N_ALLEGRO = 16
 class PandaFoldGlassesGymEnv(MujocoGymEnv):
 
     LIVE_OBJECT_BODIES = ("_glasses_body_id",)
+    LIVE_OBJECT_JOINTS = (("glass_joint_0", "sensor", "glass_joint_0_pos"),
+                          ("glass_joint_1", "sensor", "glass_joint_1_pos"),)
     metadata = {"render_modes": ["rgb_array", "human"]}
 
     def __init__(

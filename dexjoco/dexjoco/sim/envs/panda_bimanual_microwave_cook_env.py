@@ -26,6 +26,7 @@ _N_ALLEGRO = 16
 class PandaBimanualMicrowaveCookGymEnv(MujocoGymEnv):
 
     LIVE_OBJECT_BODIES = ("_hot_dog_body_id", "_microwave_body_id",)
+    LIVE_OBJECT_JOINTS = (("micro_door", "joint", "microjoint"),)
     metadata = {"render_modes": ["rgb_array", "human"]}
 
     def __init__(
