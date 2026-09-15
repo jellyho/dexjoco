@@ -29,6 +29,8 @@ _N_ALLEGRO = 16
 
 
 class PandaHammerNailGymEnv(MujocoGymEnv):
+
+    LIVE_OBJECT_BODIES = ("_hammer_body_id",)
     metadata = {"render_modes": ["rgb_array", "human"]}
 
     def __init__(
@@ -45,10 +47,14 @@ class PandaHammerNailGymEnv(MujocoGymEnv):
         impact_vel_threshold: float = 0.02,
         max_insert_depth: float = 0.0726,
         randomize: bool = False,
+        image_obs: bool | None = None,
         randomize_dynamics: bool = False,
     ):
         self.hz = 30
         self.randomize = randomize
+        # Default follows `render_mode`: "none" means nothing will ask for a frame, and
+        # rendering four cameras on every step dominates the cost of a state-only replay.
+        self.image_obs = (render_mode != "none") if image_obs is None else image_obs
         self._randomize_dynamics = randomize_dynamics
 
         super().__init__(
@@ -672,12 +678,13 @@ class PandaHammerNailGymEnv(MujocoGymEnv):
         allegro_qpos = self._data.qpos[self._allegro_dof_ids].astype(np.float32)
 
         obs["images"] = {}
-        (
-            obs["images"]["random_camera" if self.randomize else "front"],
-            obs["images"]["ego_left"],
-            obs["images"]["ego_right"],
-            obs["images"]["wrist"],
-        ) = self.render()
+        if self.image_obs:
+            (
+                obs["images"]["random_camera" if self.randomize else "front"],
+                obs["images"]["ego_left"],
+                obs["images"]["ego_right"],
+                obs["images"]["wrist"],
+            ) = self.render()
 
         obs["state"] = {
             "tcp_pose": tcp_pose,

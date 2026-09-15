@@ -30,6 +30,8 @@ _N_ALLEGRO = 16
 
 
 class PandaPickBucketGymEnv(MujocoGymEnv):
+
+    LIVE_OBJECT_BODIES = ("_boxed_food_body_id", "_bucket_body_id",)
     metadata = {"render_modes": ["rgb_array", "human"]}
 
     def __init__(
@@ -41,7 +43,7 @@ class PandaPickBucketGymEnv(MujocoGymEnv):
         time_limit: float = 10.0,
         render_spec: GymRenderingSpec = GymRenderingSpec(),
         render_mode: Literal["rgb_array", "human"] = "rgb_array",
-        image_obs: bool = True,
+        image_obs: bool | None = None,
         randomize: bool = False,
         randomize_dynamics: bool = False,
         config=None,
@@ -71,7 +73,11 @@ class PandaPickBucketGymEnv(MujocoGymEnv):
         }
 
         self.render_mode = render_mode
-        self.image_obs = image_obs
+        # Default follows `render_mode`: "none" means nothing will ask for a frame, and
+        # rendering every camera on every step is by far the dominant cost of a replay
+        # (measured 0.89 s/step on bimanual_assembly with it on, against a physics step
+        # that is a small fraction of that). Passing the flag explicitly still wins.
+        self.image_obs = (render_mode != "none") if image_obs is None else image_obs
         self.env_step = 0
         self.intervened = True
 

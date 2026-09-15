@@ -30,11 +30,14 @@ _N_ALLEGRO = 16
 
 
 class PandaPinchTongsGymEnv(MujocoGymEnv):
+
+    LIVE_OBJECT_BODIES = ("_tongs_body_id",)
     metadata = {"render_modes": ["rgb_array", "human"]}
 
     def __init__(
         self,
         randomize: bool,
+        image_obs: bool | None = None,
         randomize_dynamics: bool = False,
         seed: int = 0,
         control_dt: float = 0.02,
@@ -44,6 +47,9 @@ class PandaPinchTongsGymEnv(MujocoGymEnv):
     ):
         self.hz = 30
         self.randomize = randomize
+        # Default follows `render_mode`: "none" means nothing will ask for a frame, and
+        # rendering four cameras on every step dominates the cost of a state-only replay.
+        self.image_obs = (render_mode != "none") if image_obs is None else image_obs
         self._randomize_dynamics = randomize_dynamics
 
         super().__init__(
@@ -549,12 +555,13 @@ class PandaPinchTongsGymEnv(MujocoGymEnv):
 
         obs = {}
         obs["images"] = {}
-        (
-            obs["images"]["random_camera" if self.randomize else "front"],
-            obs["images"]["ego_left"],
-            obs["images"]["ego_right"],
-            obs["images"]["wrist"],
-        ) = self.render()
+        if self.image_obs:
+            (
+                obs["images"]["random_camera" if self.randomize else "front"],
+                obs["images"]["ego_left"],
+                obs["images"]["ego_right"],
+                obs["images"]["wrist"],
+            ) = self.render()
 
         obs["state"] = {
             "tcp_pose": tcp_pose,

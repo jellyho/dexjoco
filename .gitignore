@@ -31,3 +31,6 @@ AGENTS.md
 repomix-output.xml
 repomix.config.json
 converted_datasets/
+
+# headless smoke-test output (scripts/test_headless_envs.py)
+test_headless_videos/

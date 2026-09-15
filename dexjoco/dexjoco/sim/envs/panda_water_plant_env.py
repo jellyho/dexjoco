@@ -99,10 +99,13 @@ _N_ALLEGRO = len(_ALLEGRO_JOINT_NAMES)
 
 
 class PandaWaterPlantGymEnv(MujocoGymEnv):
+
+    LIVE_OBJECT_BODIES = ("_spray_body_id",)
     def __init__(
         self,
         render_mode: Literal["rgb_array", "human", "none"],
         randomize: bool,
+        image_obs: bool | None = None,
         seed: int = 0,
         control_dt: float = 0.02,
         physics_dt: float = 0.002,
@@ -112,7 +115,11 @@ class PandaWaterPlantGymEnv(MujocoGymEnv):
         self.hz = hz
         self.randomize = randomize
         self.randomize_dynamics = randomize_dynamics
-        self.image_obs = render_mode != "none"
+        # Default follows `render_mode`: "none" means nothing will ask for a frame, and
+        # rendering every camera on every step is by far the dominant cost of a replay
+        # (measured 0.89 s/step on bimanual_assembly with it on, against a physics step
+        # that is a small fraction of that). Passing the flag explicitly still wins.
+        self.image_obs = (render_mode != "none") if image_obs is None else image_obs
 
         super().__init__(
             xml_path=_XML_PATH, seed=seed, control_dt=control_dt, physics_dt=physics_dt

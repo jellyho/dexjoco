@@ -36,11 +36,14 @@ _SPRAY_Z = 0.955
 
 
 class PandaClickMouseGymEnv(MujocoGymEnv):
+
+    LIVE_OBJECT_BODIES = ("_mouse_body_id", "_mousepad_body_id",)
     metadata = {"render_modes": ["rgb_array", "human"]}
 
     def __init__(
         self,
         randomize: bool = False,
+        image_obs: bool | None = None,
         seed: int = 0,
         control_dt: float = 0.02,
         physics_dt: float = 0.002,
@@ -50,6 +53,9 @@ class PandaClickMouseGymEnv(MujocoGymEnv):
     ):
         self.hz = hz
         self.randomize = randomize
+        # Default follows `render_mode`: "none" means nothing will ask for a frame, and
+        # rendering four cameras on every step dominates the cost of a state-only replay.
+        self.image_obs = (render_mode != "none") if image_obs is None else image_obs
         self._randomize_dynamics = randomize_dynamics
         super().__init__(
             xml_path=_XML_PATH,
@@ -688,12 +694,13 @@ class PandaClickMouseGymEnv(MujocoGymEnv):
             }
         }
         obs["images"] = {}
-        (
-            obs["images"]["random_camera" if self.randomize else "front"],
-            obs["images"]["ego_left"],
-            obs["images"]["ego_right"],
-            obs["images"]["wrist"],
-        ) = self.render()
+        if self.image_obs:
+            (
+                obs["images"]["random_camera" if self.randomize else "front"],
+                obs["images"]["ego_left"],
+                obs["images"]["ego_right"],
+                obs["images"]["wrist"],
+            ) = self.render()
 
         return obs
 

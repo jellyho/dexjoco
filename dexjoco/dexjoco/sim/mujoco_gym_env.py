@@ -18,6 +18,36 @@ class GymRenderingSpec:
 class MujocoGymEnv(gym.Env):
     """MujocoEnv with gym interface."""
 
+    # Attribute names holding a MuJoCo body id whose LIVE pose is part of the task's state.
+    # Declared per task; the base resolves them, so adding a task is one line.
+    #
+    # WHY THIS IS NEEDED AT ALL. The recorded `state` already carries object information, but
+    # it is the INITIAL pose: `spray_ori_pose`, `plant_ori_pose` and friends are constant for
+    # the whole episode -- measured, not assumed, on water_plant demo 10, where all 15 of those
+    # dimensions are bit-identical across 309 rows. They exist so `state_restorers` can put a
+    # freshly reset scene back to `state[0]`, which is a different job from telling a policy
+    # where the object is now.
+    #
+    # Every env already holds the handles (`self._spray_body_id`, `self._hammer_body_id`, ...),
+    # so this reads them rather than introducing anything new.
+    LIVE_OBJECT_BODIES: tuple = ()
+
+    def live_object_poses(self) -> dict:
+        """{name: [x, y, z, qw, qx, qy, qz]} for each declared body, at the current step."""
+        out = {}
+        for attr in self.LIVE_OBJECT_BODIES:
+            body_id = getattr(self, attr, None)
+            if body_id is None:
+                continue
+            name = attr.lstrip('_')
+            if name.endswith('_body_id'):
+                name = name[: -len('_body_id')]
+            out['%s_pose' % name] = np.concatenate(
+                [np.asarray(self._data.xpos[body_id], np.float64),
+                 np.asarray(self._data.xquat[body_id], np.float64)]
+            )
+        return out
+
     def __init__(
         self,
         xml_path: Path,
