@@ -13,6 +13,32 @@ from ..mujoco_gym_env import GymRenderingSpec, MujocoGymEnv
 from ..rendering import MujocoRenderer
 
 
+# `int()` of a one-element numpy array raises under numpy 2 (it was deprecated in 1.25).
+# mujoco's named accessors return arrays for address-like fields -- `qposadr`, `dofadr`,
+# `mocapid` -- so every `int(model.joint(n).qposadr)` in this package is a numpy-1-only
+# idiom. `_as_int` takes the first element whether it is given an array or a scalar, which
+# keeps the same meaning on both.
+#
+# This matters beyond tidiness: jax 0.9 requires numpy 2 (it calls `np.asarray(copy=...)`),
+# so an environment that can train a policy AND step this simulator has to have numpy 2,
+# and without this fix no such environment exists.
+def _as_float(x):
+    """First element as a Python float, on numpy 1 and numpy 2 alike.
+
+    mujoco's named accessors return arrays for `qpos` and sensor `data`, and `float()` of
+    a one-element array raises under numpy 2. These calls sit inside `step`, so they are
+    invisible to any check that only resets the environment -- which is how two of them
+    survived the first pass on 2026-09-16.
+    """
+    return float(np.asarray(x).reshape(-1)[0])
+
+
+def _as_int(x):
+    return int(np.asarray(x).reshape(-1)[0])
+
+
+
+
 _HERE = Path(__file__).parent
 _XML_PATH = _HERE / "xmls" / "arena_arm_hand_microwave_cook.xml"
 _PANDA_HOME = np.asarray((0, -0.785, 0, -2.35, 0, 1.57, np.pi / 4))  # Origin
@@ -130,11 +156,11 @@ class PandaBimanualMicrowaveCookGymEnv(MujocoGymEnv):
         self._allegro_ctrl_ids = np.asarray(allegro_ids, dtype=int)
 
         self._allegro_dof_right_ids = np.asarray(
-            [int(self._model.joint(n).qposadr) for n in allegro_joint_right_names],
+            [_as_int(self._model.joint(n).qposadr) for n in allegro_joint_right_names],
             dtype=int
         )
         self._allegro_dof_left_ids = np.asarray(
-            [int(self._model.joint(n).qposadr) for n in allegro_joint_left_names],
+            [_as_int(self._model.joint(n).qposadr) for n in allegro_joint_left_names],
             dtype=int
         )
 
@@ -598,7 +624,7 @@ class PandaBimanualMicrowaveCookGymEnv(MujocoGymEnv):
 
     def _compute_success(self):
         # ---- door must be closed ----
-        micro_qpos = float(self._data.joint("microjoint").qpos)
+        micro_qpos = _as_float(self._data.joint("microjoint").qpos)
         microwave_closed = abs(micro_qpos) < 1e-2
 
         # ---- hot_dog must be inside interior bbox ----
