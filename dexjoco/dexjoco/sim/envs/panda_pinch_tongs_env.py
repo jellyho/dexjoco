@@ -154,7 +154,12 @@ class PandaPinchTongsGymEnv(MujocoGymEnv):
                 "state": gym.spaces.Dict(
                     {
                         "tcp_pose": gym.spaces.Box(-np.inf, np.inf, shape=(7,)),
-                        "gripper_pose": gym.spaces.Box(-1, 1, shape=(1,)),
+                        # 16, not 1: the value written here is `allegro_qpos`, the hand's
+                        # sixteen joint positions. The (1,) this replaces made the declared
+                        # observation space 15 numbers narrower than the observation, which
+                        # nothing notices until a wrapper sizes itself from the space --
+                        # and then a policy is built for the wrong width.
+                        "gripper_pose": gym.spaces.Box(-1, 1, shape=(16,)),
                         "tongs_ori_pose": gym.spaces.Box(
                             -np.inf, np.inf, shape=(7,), dtype=np.float64
                         ),
