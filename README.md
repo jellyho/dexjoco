@@ -76,6 +76,9 @@ training/evaluation support.
 
 ## Table of Contents
 
+1. [What this fork changes](#-what-this-fork-changes)
+1. [OGBench-format datasets](#️-ogbench-format-datasets)
+
 - [Installation](#-installation)
 - [Policy Evaluation](#-policy-evaluation)
 - [Custom Policy Integration](#-custom-policy-integration)
@@ -87,6 +90,135 @@ training/evaluation support.
 - [Headless Rendering](#headless-rendering)
 - [License](#-license)
 - [Citation](#-citation)
+
+## 🍴 What this fork changes
+
+A fork of [DexJoCo/DexJoCo](https://github.com/DexJoCo/DexJoCo), made so the benchmark can be
+used for **offline RL from state** rather than only for vision-based imitation. Upstream
+behaviour is preserved unless noted; the additions are opt-in and the rest are bug fixes.
+
+### Live object state
+
+The released recordings carry each object's pose **once, at reset**. Measured on `water_plant`
+demo 10, the fifteen `*_ori_pose` dimensions have a per-dimension range of exactly 0 across all
+309 rows — they exist so `state_restorers` can put a fresh scene back where a recording started,
+which is a different job from telling a policy where the object is *now*.
+
+`MujocoGymEnv` now declares `LIVE_OBJECT_BODIES` and answers `live_object_poses()` with the
+current `xpos`/`xquat` of each, for all eleven tasks:
+
+```python
+class PandaBimanualAssemblyGymEnv(MujocoGymEnv):
+    LIVE_OBJECT_BODIES = ("_peg_body_id", "_socket_body_id")
+```
+
+A declared handle may be a dict of body ids — `bimanual_hanoi` keeps its disks that way — and
+then contributes one entry per key in sorted order.
+
+These deliberately do **not** go into `proprio_keys`: `restore_initial_state` slices `state_vec`
+by that list, and a new key there would silently read past the recorded 38-dimensional array.
+A caller that wants the live pose asks for it.
+
+### Two more observation hooks, and how their contents were chosen
+
+A body's pose does not carry a door's hinge angle, and no geometry at all carries "how many
+digits of the passcode are already entered". An audit of all eleven `_compute_success`
+implementations found **seven** whose condition the released observation cannot reproduce.
+
+`LIVE_OBJECT_JOINTS` covers the first kind — named scalar degrees of freedom:
+
+| task | declared |
+|---|---|
+| `bimanual_microwave_cook` | `micro_door` ← joint `microjoint` |
+| `fold_glasses` | `glass_joint_0`, `glass_joint_1` (the two hinges) |
+| `water_plant` | `spray_trigger` ← sensor `spray_joint_0_pos` |
+
+`TASK_PROGRESS` covers the second, and is **not** a dump of every internal flag. Which counters
+belong was measured: for each candidate, how long must a policy act while the variable sits at
+an *intermediate* value?
+
+| variable | changes before success | steps at each | kept |
+|---|---|---|---|
+| `unlock_index` | 3 | 58 | ✅ |
+| `pinch_count` | 3 | 126 | ✅ |
+| `screen_unlocked` | 1 | — | ❌ |
+| `display_blue` | 1 | — | ❌ |
+| `trigger_pulled` | 1 | — | ❌ |
+| `nail_depth` | changes only in the last 3 steps | — | ❌ |
+
+The four that are absent each turn on once and success follows after the environment's own
+debounce window, so no policy ever acts while knowing them; carrying them would hand a critic
+the answer for zero decisions. `hammer_nail`'s nail joins `LIVE_OBJECT_BODIES` for a different
+reason than the others — its depth was dropped by the rule above, but its x,y are redrawn every
+episode and a policy has to know where to strike.
+
+### Fixes
+
+- **`image_obs` had three different meanings.** Seven envs took `image_obs: bool = True`, so
+  `render_mode="none"` did not stop them; `water_plant` derived it from `render_mode` and took no
+  flag; and `hammer_nail`, `pinch_tongs` and `click_mouse` had no `image_obs` at all and rendered
+  four cameras inside `_compute_observation` unconditionally. All eleven now take
+  `image_obs: bool | None = None`, defaulting to `render_mode != "none"`. This is worth real
+  time: rendering was **0.89 s per control step** on `bimanual_assembly` and 0.039 s with it off,
+  a 23× difference on a state-only replay.
+- **`gripper_pose` was declared `shape=(1,)`** in `hammer_nail`, `pinch_tongs` and `click_mouse`
+  while `_compute_observation` writes `allegro_qpos`, sixteen numbers. Invisible until something
+  sizes itself from the *space* rather than from an observation, and then a policy is built 15
+  dimensions too narrow.
+- **numpy 2.** `int()` and `float()` of a one-element array were deprecated in numpy 1.25 and
+  raise in numpy 2, and mujoco's named accessors return arrays for exactly the fields this
+  package converted that way (`qposadr`, `dofadr`, `mocapid`, sensor `data`, joint `qpos`) — 29
+  call sites. This is not tidying: jax requires numpy 2, so without it there is no single
+  environment that can both train a policy and step this simulator, and evaluating against a
+  different MuJoCo than the data came from is not an acceptable substitute.
+
+## 🗄️ OGBench-format datasets
+
+[`jellyho/dexjoco-ogbench-30hz`](https://huggingface.co/datasets/jellyho/dexjoco-ogbench-30hz)
+— the demonstrations replayed through this fork, with the live object state, in the layout
+OGBench's loaders read.
+
+**Layout.** One row per *state*, so a trajectory of T transitions is T+1 rows; `terminals` marks
+the last row and that row's action is a pad. Keys: `observations`, `actions`, `terminals`,
+`rewards`, `episode_success`, `action_low`, `action_high`.
+
+**Observation.** `proprioception | object poses (7 each) | object joints (1 each) | task
+progress (1 each)`, each block sorted by key, with the names and widths in the `.json` beside
+each file so the privileged part can be sliced off again.
+
+**Reward** is 0 until the step the environment reports success, then 1, and the episode ends
+there. Failed replays are kept and labelled by `episode_success`; the replayed success rate is
+per task (0.57 to 1.00) and recorded in the sidecar.
+
+**Actions** are stored unscaled — metres, quaternion components and joint targets in one vector
+— with the mapping beside them:
+
+```python
+a_unit = (a - low) / (high - low + 1e-8) * 2 - 1     # what a policy predicts
+a_raw  = (a_unit + 1) / 2 * (high - low + 1e-8) + low  # what the env consumes
+```
+
+They are also reordered into the **policy** layout: `[pose, hand]` for one arm and
+`[r_pose, l_pose, r_hand, l_hand]` for two. The recordings use the raw env's
+`[right(23), left(23)]`, which `DualArmPolicyWrapper` would then reorder — storing that layout
+would train a policy whose output the wrapper permutes.
+
+**Getting one**, with nothing installed but the standard library:
+
+```python
+import urllib.request, numpy as np
+url = ('https://huggingface.co/datasets/jellyho/dexjoco-ogbench-30hz/'
+       'resolve/main/water_plant_state.npz')
+urllib.request.urlretrieve(url, 'water_plant.npz')
+z = np.load('water_plant.npz')
+```
+
+**Rebuilding them** needs this fork and the converter in
+[`gwanwoosong/acrft_ogbench`](https://github.com/gwanwoosong/acrft_ogbench):
+
+```bash
+python exps/0915_dexjoco/convert.py --task water_plant
+```
 
 ## 🚀 Installation
 
