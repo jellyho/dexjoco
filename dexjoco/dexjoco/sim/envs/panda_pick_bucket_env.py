@@ -392,6 +392,14 @@ class PandaPickBucketGymEnv(MujocoGymEnv):
         self, seed=None, **kwargs
     ) -> Tuple[Dict[str, np.ndarray], Dict[str, Any]]:
         """Reset the environment."""
+        # HONOUR THE SEED. `np.random.seed` was called in `__init__` and never again, so
+        # every reset drew from wherever the stream happened to be: `reset(seed=k)` twice
+        # gave two different scenes, and gymnasium's contract says it must give one. An
+        # evaluation therefore scored a different set of episodes every time it ran --
+        # measured, before this: same seed 2e-2 to 3e-1 apart in the observation, which is
+        # as far apart as two different seeds.
+        if seed is not None:
+            np.random.seed(seed)
         mujoco.mj_resetData(self._model, self._data)
 
         # reset table height
